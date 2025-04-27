@@ -2,9 +2,7 @@
 -- +goose StatementBegin
 CREATE TABLE wallets (
      id         UUID PRIMARY KEY,
-     balance    BIGINT NOT NULL          DEFAULT 0,
-     created_at TIMESTAMP WITH TIME ZONE DEFAULT now(),
-     updated_at TIMESTAMP WITH TIME ZONE DEFAULT now()
+     balance    BIGINT NOT NULL          DEFAULT 0
 );
 
 -- +goose StatementEnd

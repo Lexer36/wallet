@@ -7,20 +7,25 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
+type PgxIface interface {
+	BeginTx(ctx context.Context, opts pgx.TxOptions) (pgx.Tx, error)
+	QueryRow(ctx context.Context, sql string, args ...any) pgx.Row
+}
+
 type Storage struct {
-	db *pgxpool.Pool
+	db PgxIface
 }
 
 func (s *Storage) BeginTx(ctx context.Context, opts pgx.TxOptions) (pgx.Tx, error) {
 	return s.db.BeginTx(ctx, opts)
 }
 
-func New(db *pgxpool.Pool) *Storage {
+func New(db PgxIface) *Storage {
 	return &Storage{db: db}
 }
 
-func Init(ctx context.Context, dsn string) (*pgxpool.Pool, error) {
-	pool, err := pgxpool.New(ctx, dsn)
+func Init(dsn string) (*pgxpool.Pool, error) {
+	pool, err := pgxpool.New(context.Background(), dsn)
 	if err != nil {
 		return nil, fmt.Errorf("unable to connect to database: %w", err)
 	}

@@ -1,0 +1,57 @@
+networks:
+  wallet-network:
+    driver: bridge
+
+services:
+  wallet-service:
+    build: .
+    container_name: wallet-service
+    ports:
+      - "8080:8080"
+    depends_on:
+      - postgres
+    networks:
+      - wallet-network
+    restart: unless-stopped
+    env_file:
+      - config.env
+    volumes:
+      - ./config.env:/app/config.env
+      - ./migrations/:/app/migrations/
+
+  postgres:
+    image: postgres:14-alpine
+    container_name: postgres
+    ports:
+      - "5434:5432"
+    networks:
+      - wallet-network
+    restart: unless-stopped
+    env_file:
+      - config.env
+    volumes:
+      - ./data:/var/lib/postgresql/data
+
+#  prometheus:
+#    image: prom/prometheus
+#    container_name: prometheus
+#    volumes:
+#      - ./prometheus.yml:/etc/prometheus/prometheus.yml
+#    ports:
+#      - "9090:9090"
+#    networks:
+#      - wallet-network
+#    env_file:
+#      - config.env
+#
+#  grafana:
+#    image: grafana/grafana
+#    container_name: grafana
+#    ports:
+#      - "3000:3000"
+#    depends_on:
+#      - prometheus
+#    networks:
+#      - wallet-network
+#    env_file:
+#      - config.env

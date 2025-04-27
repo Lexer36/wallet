@@ -9,10 +9,10 @@ import (
 )
 
 type WalletStorage interface {
-	BeginTx(ctx context.Context, opts pgx.TxOptions) (pgx.Tx, error)
-	Deposit(ctx context.Context, tx pgx.Tx, walletID uuid.UUID, amount int64) (int64, error)  // returns updated balance
-	Withdraw(ctx context.Context, tx pgx.Tx, walletID uuid.UUID, amount int64) (int64, error) // returns updated balance
-	GetBalance(ctx context.Context, walletID uuid.UUID) (int64, error)
+	BeginTx(ctx context.Context, opts pgx.TxOptions) (pgx.Tx, error)                          // BeginTx starts a new database transaction
+	Deposit(ctx context.Context, tx pgx.Tx, walletID uuid.UUID, amount int64) (int64, error)  // Deposit returns updated balance
+	Withdraw(ctx context.Context, tx pgx.Tx, walletID uuid.UUID, amount int64) (int64, error) // Withdraw returns updated balance
+	GetBalance(ctx context.Context, walletID uuid.UUID) (int64, error)                        // GetBalance returns balance
 }
 
 type WalletCache interface {
@@ -40,17 +40,20 @@ func (ws *WalletService) Deposit(ctx context.Context, walletID uuid.UUID, amount
 		IsoLevel: pgx.RepeatableRead,
 	})
 	if err != nil {
+		ws.log.Error("Error starting transaction", "walletID", walletID, "amount", amount, "error", err)
 		return err
 	}
 	defer tx.Rollback(ctx)
 
 	balance, err := ws.repo.Deposit(ctx, tx, walletID, amount)
 	if err != nil {
+		ws.log.Error("Error during deposit", "walletID", walletID, "amount", amount, "error", err)
 		return err
 	}
 
 	err = tx.Commit(ctx)
 	if err != nil {
+		ws.log.Error("Error committing transaction", "walletID", walletID, "amount", amount, "error", err)
 		return err
 	}
 
@@ -64,27 +67,30 @@ func (ws *WalletService) Withdraw(ctx context.Context, walletID uuid.UUID, amoun
 		IsoLevel: pgx.RepeatableRead,
 	})
 	if err != nil {
+		ws.log.Error("Error starting transaction", "walletID", walletID, "amount", amount, "error", err)
 		return err
 	}
 	defer tx.Rollback(ctx)
 
 	balance, err := ws.repo.Withdraw(ctx, tx, walletID, amount)
 	if err != nil {
+		ws.log.Error("Error during withdrawal", "walletID", walletID, "amount", amount, "error", err)
 		return err
 	}
 
 	if balance < 0 {
-		// rollback will be called in defer
+		ws.log.Error("Insufficient funds", "walletID", walletID, "amount", amount, "balance", balance)
 		return wallet.ErrNotEnoughMoney
 	}
 
 	err = tx.Commit(ctx)
 	if err != nil {
+		ws.log.Error("Error committing transaction", "walletID", walletID, "amount", amount, "error", err)
 		return err
 	}
 
 	ws.cache.Set(ctx, walletID.String(), balance)
-
+	ws.log.Info("Withdrawal completed", "walletID", walletID, "amount", amount, "newBalance", balance)
 	return nil
 }
 
@@ -96,10 +102,10 @@ func (ws *WalletService) GetBalance(ctx context.Context, walletID uuid.UUID) (in
 
 	balance, err := ws.repo.GetBalance(ctx, walletID)
 	if err != nil {
+		ws.log.Error("Error fetching balance from DB", "walletID", walletID, "error", err)
 		return 0, err
 	}
 
 	ws.cache.Set(ctx, walletID.String(), balance)
-
 	return balance, nil
 }

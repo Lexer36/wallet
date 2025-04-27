@@ -60,10 +60,11 @@ func (h *WalletHandler) WalletOperation(w http.ResponseWriter, r *http.Request) 
 }
 
 func (h *WalletHandler) GetBalance(w http.ResponseWriter, r *http.Request) {
+	// getting wallet uuid
 	walletIDStr := r.URL.Path[len("/api/v1/wallets/"):]
 	walletID, err := uuid.Parse(walletIDStr)
 	if err != nil {
-		http.Error(w, "invalid wallet id", http.StatusBadRequest)
+		h.handleError(w, model.ErrInvalidRequest)
 		return
 	}
 
@@ -86,6 +87,8 @@ func (h *WalletHandler) handleError(w http.ResponseWriter, err error) {
 	case errors.Is(err, wallet.ErrNotEnoughMoney):
 		http.Error(w, err.Error(), http.StatusConflict)
 	case errors.Is(err, model.ErrInvalidAmount):
+		http.Error(w, err.Error(), http.StatusBadRequest)
+	case errors.Is(err, model.ErrInvalidRequest):
 		http.Error(w, err.Error(), http.StatusBadRequest)
 	default:
 		http.Error(w, "internal server error", http.StatusInternalServerError)

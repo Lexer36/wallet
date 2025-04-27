@@ -3,11 +3,16 @@ package main
 import (
 	"context"
 	"fmt"
+	lru2 "github.com/hashicorp/golang-lru"
+	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/jackc/pgx/v5/stdlib"
+	"github.com/pressly/goose/v3"
 	"log/slog"
 	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 	"wallet/internal/metrics"
 	"wallet/internal/repository/cache"
 	"wallet/internal/repository/postgres"
@@ -24,55 +29,64 @@ const (
 )
 
 func main() {
-	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
-	defer cancel()
-
 	err := godotenv.Load("config.env")
 	if err != nil {
 		panic("failed to load env")
 	}
 	logger := setupLogger(os.Getenv("ENV"))
 
-	db, err := postgres.Init(ctx, os.Getenv("DB_DSN"))
+	pool, err := postgres.Init(os.Getenv("DB_DSN"))
 	if err != nil {
-		logger.Error("Failed to connect to database", err)
+		panic(err)
 	}
-	defer db.Close()
+	defer pool.Close()
 
-	repo := postgres.New(db)
-	cache := cache.New()
+	initMigrations(pool)
+	repo := postgres.New(pool)
+
+	lru, err := lru2.New(1000) // can be replaced by other cache implementations
+	if err != nil {
+		panic(err)
+	}
+	cache := cache.New(lru)
 
 	walletService := services.NewWalletService(repo, cache, logger)
-
 	walletHandler := rest.NewWalletHandler(walletService)
 
 	mux := http.NewServeMux()
 
 	initMetrics(mux)
 
-	mux.HandleFunc("/api/v1/wallet", walletHandler.WalletOperation)
-	mux.HandleFunc("/api/v1/wallets/", walletHandler.GetBalance)
+	mux.Handle("/api/v1/wallet", metrics.MetricsMiddleware(http.HandlerFunc(walletHandler.WalletOperation), "WalletOperation"))
+	mux.Handle("/api/v1/wallets/", metrics.MetricsMiddleware(http.HandlerFunc(walletHandler.GetBalance), "GetBalance"))
 
 	server := &http.Server{
 		Addr:    os.Getenv("SERVER_ADDRESS"),
 		Handler: mux,
 	}
 
-	stop := make(chan os.Signal, 1)
-	signal.Notify(stop, os.Interrupt, syscall.SIGTERM)
-
+	// listen to OS signals and gracefully shutdown HTTP server
+	stopped := make(chan struct{})
 	go func() {
-		logger.Info("Starting server")
-		if err := server.ListenAndServe(); err != nil {
-			logger.Error("failed to start server", err)
+		sigint := make(chan os.Signal, 1)
+		signal.Notify(sigint, os.Interrupt, syscall.SIGINT, syscall.SIGTERM)
+		<-sigint
+
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+
+		if err := server.Shutdown(ctx); err != nil {
+			logger.Error("HTTP Server Shutdown Error: %v", err)
 		}
+		close(stopped)
 	}()
 
-	<-stop
-
-	if err := server.Shutdown(ctx); err != nil {
-		logger.Error("server shutdown failed: %v", err)
+	logger.Info("Starting server")
+	if err := server.ListenAndServe(); err != nil {
+		logger.Error("failed to start server", err)
 	}
+
+	<-stopped
 
 	fmt.Println("Server exited properly")
 }
@@ -81,6 +95,18 @@ func initMetrics(mux *http.ServeMux) {
 	metrics.Register()
 
 	mux.Handle("/metrics", metrics.Handler())
+}
+
+func initMigrations(pool *pgxpool.Pool) {
+	// we can change this to local only usage
+	// run migrations
+	db := stdlib.OpenDBFromPool(pool)
+	if err := goose.SetDialect("postgres"); err != nil {
+		panic(err)
+	}
+	if err := goose.Up(db, "./migrations"); err != nil {
+		panic(err)
+	}
 }
 
 func setupLogger(env string) *slog.Logger {

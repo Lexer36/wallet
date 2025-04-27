@@ -13,7 +13,7 @@ func (s *Storage) GetBalance(ctx context.Context, walletID uuid.UUID) (int64, er
 	query := `
 		SELECT balance 
 		FROM wallets 
-		WHERE wallet_id = $1
+		WHERE id = $1
 	`
 
 	var balance int64
@@ -41,7 +41,7 @@ func (s *Storage) updateBalance(ctx context.Context, tx pgx.Tx, walletID uuid.UU
 	query := `
 		UPDATE wallets
 		SET balance = balance + $1
-		WHERE wallet_id = $2
+		WHERE id = $2
 		RETURNING balance;
 		`
 
