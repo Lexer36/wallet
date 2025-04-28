@@ -17,9 +17,11 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// mockgen -destination=mock_wallet_service.go -package=mocks wallet/internal/rest WalletService
+//go:generate mockgen -destination=mocks/mock_wallet_service.go -package=mocks wallet/internal/rest WalletService
 
 func TestWalletHandler_WalletOperation(t *testing.T) {
+	t.Parallel()
+
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
@@ -114,12 +116,14 @@ func TestWalletHandler_WalletOperation(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
 			tt.setupMock()
 
 			body, err := json.Marshal(tt.request)
 			require.NoError(t, err)
 
-			req := httptest.NewRequest(http.MethodPost, "/api/v1/wallets/operation", bytes.NewReader(body))
+			req := httptest.NewRequest(http.MethodPost, "/api/v1/wallets", bytes.NewReader(body))
 			rec := httptest.NewRecorder()
 
 			handler.WalletOperation(rec, req)
@@ -133,6 +137,8 @@ func TestWalletHandler_WalletOperation(t *testing.T) {
 }
 
 func TestWalletHandler_GetBalance(t *testing.T) {
+	t.Parallel()
+
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
@@ -197,6 +203,8 @@ func TestWalletHandler_GetBalance(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
 			tt.setupMock()
 
 			req := httptest.NewRequest(http.MethodGet, "/api/v1/wallets/"+tt.walletID, nil)
@@ -212,6 +220,7 @@ func TestWalletHandler_GetBalance(t *testing.T) {
 			if tt.expectedStatus == http.StatusOK {
 				var resp handlerModel.WalletOperationResponse
 				err := json.NewDecoder(res.Body).Decode(&resp)
+
 				require.NoError(t, err)
 				require.Equal(t, tt.expectedBody.WalletID, resp.WalletID)
 				require.Equal(t, tt.expectedBody.Balance, resp.Balance)

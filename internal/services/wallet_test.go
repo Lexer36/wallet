@@ -1,7 +1,6 @@
 package services_test
 
 import (
-	"context"
 	"errors"
 	"wallet/internal/model/wallet"
 
@@ -16,11 +15,13 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// mockgen -destination=mock_walletstorage.go -package=services wallet/internal/services WalletStorage
-// mockgen -destination=mock_walletcache.go -package=services wallet/internal/services WalletCache
-// mockgen -destination=mock_tx.go -package=services github.com/jackc/pgx/v5 Tx
+//go:generate mockgen -destination=mocks/mock_walletstorage.go -package=mocks wallet/internal/services WalletStorage
+//go:generate mockgen -destination=mocks/mock_walletcache.go -package=mocks wallet/internal/services WalletCache
+//go:generate mockgen -destination=mocks/mock_tx.go -package=mocks github.com/jackc/pgx/v5 Tx
 
 func TestWalletService_Deposit_Success(t *testing.T) {
+	t.Parallel()
+
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
@@ -54,11 +55,13 @@ func TestWalletService_Deposit_Success(t *testing.T) {
 	tx.EXPECT().
 		Rollback(gomock.Any()).AnyTimes()
 
-	err := service.Deposit(context.Background(), walletID, amount)
+	err := service.Deposit(t.Context(), walletID, amount)
 	require.NoError(t, err)
 }
 
 func TestWalletService_Deposit_DepositError(t *testing.T) {
+	t.Parallel()
+
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
@@ -84,11 +87,13 @@ func TestWalletService_Deposit_DepositError(t *testing.T) {
 	tx.EXPECT().
 		Rollback(gomock.Any())
 
-	err := service.Deposit(context.Background(), walletID, amount)
+	err := service.Deposit(t.Context(), walletID, amount)
 	require.Error(t, err)
 }
 
 func TestWalletService_Withdraw(t *testing.T) {
+	t.Parallel()
+
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
@@ -133,8 +138,9 @@ func TestWalletService_Withdraw(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			tx := mocks.NewMockTx(ctrl)
+			t.Parallel()
 
+			tx := mocks.NewMockTx(ctrl)
 			repo.EXPECT().
 				BeginTx(gomock.Any(), gomock.Any()).
 				Return(tx, nil)
@@ -151,7 +157,6 @@ func TestWalletService_Withdraw(t *testing.T) {
 				cache.EXPECT().
 					Set(gomock.Any(), walletID.String(), tt.withdrawReturn)
 			} else if tt.withdrawError == nil && tt.withdrawReturn >= 0 {
-				// Commit вызовется, но ошибка вернется
 				tx.EXPECT().
 					Commit(gomock.Any()).
 					Return(tt.commitError)
@@ -160,7 +165,7 @@ func TestWalletService_Withdraw(t *testing.T) {
 			tx.EXPECT().
 				Rollback(gomock.Any()).AnyTimes()
 
-			err := service.Withdraw(context.Background(), walletID, amount)
+			err := service.Withdraw(t.Context(), walletID, amount)
 
 			if tt.expectError != nil {
 				require.Error(t, err)
@@ -173,6 +178,8 @@ func TestWalletService_Withdraw(t *testing.T) {
 }
 
 func TestWalletService_GetBalance(t *testing.T) {
+	t.Parallel()
+
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
@@ -217,8 +224,9 @@ func TestWalletService_GetBalance(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			ctx := context.Background()
+			t.Parallel()
 
+			ctx := t.Context()
 			cache.EXPECT().
 				Get(ctx, walletID.String()).
 				Return(tt.cacheBalance, tt.cacheHit)
@@ -235,7 +243,6 @@ func TestWalletService_GetBalance(t *testing.T) {
 			}
 
 			balance, err := service.GetBalance(ctx, walletID)
-
 			if tt.expectError {
 				require.Error(t, err)
 			} else {

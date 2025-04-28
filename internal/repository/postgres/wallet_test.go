@@ -50,6 +50,8 @@ func TestStorage_Withdraw(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
 			mockPool.ExpectBegin()
 			mockTx, err := mockPool.Begin(ctx)
 			require.NoError(t, err)
