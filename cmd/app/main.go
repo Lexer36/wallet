@@ -76,14 +76,14 @@ func main() {
 		defer cancel()
 
 		if err := server.Shutdown(ctx); err != nil {
-			logger.Error("HTTP Server Shutdown Error: %v", err)
+			logger.Error("HTTP Server Shutdown Error", "error", err)
 		}
 		close(stopped)
 	}()
 
 	logger.Info("Starting server")
 	if err := server.ListenAndServe(); err != nil {
-		logger.Error("failed to start server", err)
+		logger.Error("failed to start server", "error", err)
 	}
 
 	<-stopped
